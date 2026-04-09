@@ -6,7 +6,6 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Final
 
 from dotenv import dotenv_values
 
@@ -22,25 +21,6 @@ DEFAULT_MODERATION_BLOCK_CATEGORIES = (
     "violence",
     "violence_graphic",
 )
-
-SETTINGS_ENV_KEYS: Final[tuple[str, ...]] = (
-    "OPENAI_API_KEY",
-    "OPENAI_CHAT_MODEL",
-    "OPENAI_EMBED_MODEL",
-    "OPENAI_EMBED_FALLBACK_MODELS",
-    "OPENAI_TTS_MODEL",
-    "OPENAI_STT_MODEL",
-    "OPENAI_IMAGE_MODEL",
-    "OPENAI_TTS_VOICE",
-    "CHROMA_DIR",
-    "BOOK_SUMMARIES_JSON",
-    "TOP_K",
-    "MODERATION_ENABLED",
-    "OPENAI_MODERATION_MODEL",
-    "MODERATION_FAIL_BEHAVIOR",
-    "MODERATION_BLOCK_CATEGORIES",
-)
-
 
 def _build_env_map() -> dict[str, str]:
     """Merge .env values with process env where process env has precedence."""
@@ -95,20 +75,6 @@ class Settings:
     moderation_block_categories: tuple[str, ...]
 
 
-def _dotenv_mtime_ns() -> int:
-    """Return .env mtime (ns) or -1 when file does not exist."""
-    try:
-        return Path(".env").stat().st_mtime_ns
-    except FileNotFoundError:
-        return -1
-
-
-def _settings_env_snapshot() -> tuple[tuple[str, str], ...]:
-    """Capture relevant env values to key cache invalidation safely."""
-    env_map = _build_env_map()
-    return tuple((key, env_map.get(key, "")) for key in SETTINGS_ENV_KEYS)
-
-
 def _parse_settings(
     env_map: dict[str, str],
     top_k_raw: str,
@@ -150,14 +116,8 @@ def _parse_settings(
 
 
 @lru_cache(maxsize=32)
-def _get_settings_cached(
-    dotenv_mtime_ns: int,
-    env_snapshot: tuple[tuple[str, str], ...],
-) -> Settings:
-    """Create settings keyed by .env mtime + relevant env values."""
-    del dotenv_mtime_ns
-    del env_snapshot
-
+def _get_settings_cached() -> Settings:
+    """Create settings once per process; restart to apply config changes."""
     env_map = _build_env_map()
     moderation_fail_behavior = env_map.get("MODERATION_FAIL_BEHAVIOR", "allow").strip().lower()
     if moderation_fail_behavior not in {"allow", "block"}:
@@ -172,8 +132,8 @@ def _get_settings_cached(
 
 
 def get_settings() -> Settings:
-    """Load, validate, and cache settings while supporting runtime .env refresh."""
-    return _get_settings_cached(_dotenv_mtime_ns(), _settings_env_snapshot())
+    """Load, validate, and cache settings for process lifetime."""
+    return _get_settings_cached()
 
 
 def _clear_settings_cache() -> None:

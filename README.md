@@ -70,7 +70,8 @@ Optional model settings:
 
 Runtime behavior:
 
-- The web API reads `.env` changes at runtime and applies settings without process restart.
+- Configuration is loaded at process startup and treated as immutable at runtime.
+- To apply `.env` or process environment changes, restart the app process.
 - Process environment variables still take precedence over `.env` values.
 - For embedding model changes, index data is stored per-model collection. Use fallbacks during rollout to avoid retrieval downtime.
 

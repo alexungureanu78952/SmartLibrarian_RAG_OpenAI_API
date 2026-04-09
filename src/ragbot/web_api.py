@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import logging
 import os
-import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -25,9 +23,6 @@ from ragbot.tts import synthesize_to_mp3
 
 MAX_STT_BYTES = 25 * 1024 * 1024
 ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"}
-
-
-LOGGER = logging.getLogger(__name__)
 
 
 def _validate_stt_upload(file: UploadFile, raw: bytes) -> None:
@@ -62,28 +57,6 @@ def _cors_origins_from_env() -> list[str]:
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
-def _refresh_runtime_if_needed(app: FastAPI) -> None:
-    """Reload settings/chatbot on-the-fly when .env config changes."""
-    latest_settings = get_settings()
-    if latest_settings == app.state.settings:
-        return
-
-    with app.state.runtime_lock:
-        latest_settings = get_settings()
-        if latest_settings == app.state.settings:
-            return
-
-        try:
-            latest_chatbot = BookChatbot(latest_settings)
-        except Exception:  # noqa: BLE001
-            LOGGER.exception("Failed to apply updated .env settings; continuing with previous runtime.")
-            return
-
-        app.state.settings = latest_settings
-        app.state.chatbot = latest_chatbot
-        LOGGER.info("Applied updated .env settings at runtime without restart.")
-
-
 class ChatRequest(BaseModel):
     """Request payload for book recommendation chat."""
 
@@ -111,7 +84,6 @@ def create_app() -> FastAPI:
         settings = get_settings()
         app.state.settings = settings
         app.state.chatbot = BookChatbot(settings)
-        app.state.runtime_lock = threading.Lock()
         yield
 
     app = FastAPI(title="Smart Librarian API", version="0.1.0", lifespan=lifespan)
@@ -145,7 +117,6 @@ def create_app() -> FastAPI:
 
     @app.post("/api/stt")
     async def transcribe(file: UploadFile = File(...)) -> dict[str, str]:
-        _refresh_runtime_if_needed(app)
         raw = await file.read()
         _validate_stt_upload(file=file, raw=raw)
 
@@ -161,7 +132,6 @@ def create_app() -> FastAPI:
 
     @app.post("/api/chat", response_model=ChatResponse)
     def chat(req: ChatRequest, request: Request) -> ChatResponse:
-        _refresh_runtime_if_needed(request.app)
         message = req.message.strip()
         if not message:
             raise HTTPException(status_code=400, detail="Message cannot be empty.")
