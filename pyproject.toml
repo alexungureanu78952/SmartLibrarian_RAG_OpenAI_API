@@ -1,0 +1,35 @@
+[project]
+name = "book-rag-chatbot"
+version = "0.1.0"
+description = "CLI AI chatbot for book recommendations using OpenAI + ChromaDB + tool calling"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "openai>=1.72.0",
+  "chromadb>=0.6.3",
+  "python-dotenv>=1.0.1",
+  "pydantic>=2.10.6",
+  "fastapi>=0.115.12",
+  "uvicorn>=0.34.0",
+  "python-multipart>=0.0.20",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.5",
+]
+
+[project.scripts]
+bookbot-index = "ragbot.indexer:main"
+bookbot-chat = "ragbot.ui_cli:main"
+bookbot-web = "ragbot.web_api:run"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

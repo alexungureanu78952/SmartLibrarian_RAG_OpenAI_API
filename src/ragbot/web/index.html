@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Librarian</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <style>
+      :root {
+        --bg: #f6f1e8;
+        --ink: #1c1a17;
+        --card: #fffaf3;
+        --accent: #d96d3a;
+        --accent-2: #3e7a63;
+        --muted: #6d665f;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: radial-gradient(circle at 10% 0%, #f8e8d4 0%, var(--bg) 48%),
+                    radial-gradient(circle at 100% 100%, #dce8df 0%, var(--bg) 45%);
+      }
+      .layout {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 18px;
+        align-items: stretch;
+      }
+      .panel {
+        background: var(--card);
+        border: 1px solid #eadfce;
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 10px 30px rgba(33, 20, 5, 0.08);
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(1.8rem, 3vw, 2.7rem);
+        font-family: "Alegreya", Georgia, serif;
+      }
+      .sub {
+        color: var(--muted);
+        margin-top: 8px;
+      }
+      .row { display: flex; gap: 10px; flex-wrap: wrap; }
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #fff;
+        border: 1px solid #e6dbc8;
+        border-radius: 999px;
+        padding: 8px 12px;
+      }
+      .chat-box {
+        margin-top: 18px;
+        display: grid;
+        gap: 12px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 104px;
+        border-radius: 12px;
+        border: 1px solid #d8ccb8;
+        padding: 12px;
+        font: inherit;
+      }
+      button {
+        border: 0;
+        border-radius: 12px;
+        padding: 10px 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .primary { background: var(--accent); color: #fff; }
+      .secondary { background: var(--accent-2); color: #fff; }
+      .ghost { background: #efe3d0; color: #503f2d; }
+      .out {
+        white-space: pre-wrap;
+        line-height: 1.5;
+        background: #fff;
+        border: 1px solid #e6dbc8;
+        border-radius: 12px;
+        padding: 12px;
+        min-height: 120px;
+      }
+      .media {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 12px;
+      }
+      img {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid #e6dbc8;
+      }
+      @media (max-width: 900px) {
+        .hero { grid-template-columns: 1fr; }
+        .media { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" class="layout">
+      <div class="hero">
+        <div class="panel">
+          <h1>Smart Librarian</h1>
+          <div class="sub">AI book recommendations with RAG, tool calling, voice mode, and image generation.</div>
+          <div class="chat-box">
+            <textarea v-model="message" placeholder="Ask for a recommendation. Example: I want a book about friendship and magic."></textarea>
+            <div class="row">
+              <label class="toggle"><input type="checkbox" v-model="enableTts" /> Enable TTS</label>
+              <label class="toggle"><input type="checkbox" v-model="enableImage" /> Generate image</label>
+              <label class="toggle"><input type="checkbox" v-model="voiceMode" /> Voice mode</label>
+            </div>
+            <div class="row">
+              <button class="primary" @click="sendChat" :disabled="loading">{{ loading ? 'Thinking...' : 'Get Recommendation' }}</button>
+              <button class="secondary" v-if="voiceMode && !recording" @click="startRecording">Start Voice Input</button>
+              <button class="ghost" v-if="recording" @click="stopRecording">Stop Voice Input</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <strong>Transcript / Status</strong>
+          <div class="out">{{ statusText }}</div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top: 16px">
+        <strong>Assistant Output</strong>
+        <div class="out">{{ answerText }}</div>
+        <div class="media" v-if="audioUrl || imageUrl">
+          <div v-if="audioUrl">
+            <strong>Audio</strong>
+            <audio :src="audioUrl" controls style="width: 100%; margin-top: 8px"></audio>
+          </div>
+          <div v-if="imageUrl">
+            <strong>Generated Image</strong>
+            <img :src="imageUrl" alt="Generated book scene" style="margin-top: 8px" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const { createApp } = Vue;
+      const API_BASE = window.location.protocol === "file:" ? "http://127.0.0.1:8000" : "";
+
+      createApp({
+        data() {
+          return {
+            message: "",
+            loading: false,
+            statusText: "Ready.",
+            answerText: "",
+            enableTts: false,
+            enableImage: false,
+            voiceMode: false,
+            mediaRecorder: null,
+            audioChunks: [],
+            recording: false,
+            audioUrl: null,
+            imageUrl: null,
+          };
+        },
+        methods: {
+          async sendChat() {
+            const trimmed = this.message.trim();
+            if (!trimmed) {
+              this.statusText = "Please enter a message first.";
+              return;
+            }
+            this.loading = true;
+            this.answerText = "";
+            this.audioUrl = null;
+            this.imageUrl = null;
+            this.statusText = "Sending request...";
+            try {
+              const resp = await fetch(`${API_BASE}/api/chat`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  message: trimmed,
+                  enable_tts: this.enableTts,
+                  enable_image: this.enableImage,
+                }),
+              });
+
+              if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.detail || "Chat request failed.");
+              }
+
+              const data = await resp.json();
+              if (data.blocked) {
+                this.answerText = data.detailed_summary || "Message blocked.";
+              } else {
+                this.answerText = `Recommended book: ${data.recommendation_title}\nWhy: ${data.reason}\n\nDetailed summary:\n${data.detailed_summary}`;
+              }
+
+              if (data.audio_url) {
+                this.audioUrl = API_BASE ? `${API_BASE}${data.audio_url}` : data.audio_url;
+              }
+              if (data.image_url) {
+                this.imageUrl = API_BASE ? `${API_BASE}${data.image_url}` : data.image_url;
+              }
+
+              this.statusText = "Done.";
+            } catch (err) {
+              this.statusText = `Network error: ${err.message}. Ensure backend is running with 'bookbot-web' on http://127.0.0.1:8000.`;
+            } finally {
+              this.loading = false;
+            }
+          },
+
+          async startRecording() {
+            try {
+              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              this.audioChunks = [];
+              this.mediaRecorder = new MediaRecorder(stream);
+              this.mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) this.audioChunks.push(event.data);
+              };
+              this.mediaRecorder.onstop = () => {
+                stream.getTracks().forEach((track) => track.stop());
+                this.uploadVoice();
+              };
+              this.mediaRecorder.start();
+              this.recording = true;
+              this.statusText = "Recording... speak now.";
+            } catch (err) {
+              this.statusText = `Microphone error: ${err.message}`;
+            }
+          },
+
+          stopRecording() {
+            if (this.mediaRecorder && this.recording) {
+              this.mediaRecorder.stop();
+              this.recording = false;
+              this.statusText = "Processing voice...";
+            }
+          },
+
+          async uploadVoice() {
+            try {
+              const blob = new Blob(this.audioChunks, { type: "audio/webm" });
+              const form = new FormData();
+              form.append("file", blob, "voice.webm");
+
+              const resp = await fetch(`${API_BASE}/api/stt`, {
+                method: "POST",
+                body: form,
+              });
+
+              if (!resp.ok) {
+                const err = await resp.json();
+                throw new Error(err.detail || "STT failed.");
+              }
+
+              const data = await resp.json();
+              this.message = data.text || "";
+              this.statusText = `Transcript: ${this.message}`;
+              if (this.message.trim()) {
+                await this.sendChat();
+              }
+            } catch (err) {
+              this.statusText = `STT error: ${err.message}`;
+            }
+          },
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>
