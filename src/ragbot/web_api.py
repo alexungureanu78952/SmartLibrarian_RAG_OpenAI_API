@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -23,6 +24,7 @@ from ragbot.tts import synthesize_to_mp3
 
 MAX_STT_BYTES = 25 * 1024 * 1024
 ALLOWED_AUDIO_EXTENSIONS = {".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"}
+LOGGER = logging.getLogger(__name__)
 
 
 def _validate_stt_upload(file: UploadFile, raw: bytes) -> None:
@@ -57,6 +59,23 @@ def _cors_origins_from_env() -> list[str]:
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
+def _ensure_index_ready(chatbot: BookChatbot) -> None:
+    """Fail startup when no indexed vectors are available for retrieval."""
+    retrievers = getattr(chatbot, "retrievers", [])
+    if not retrievers:
+        raise RuntimeError("No retrievers were configured. Check embedding model settings.")
+
+    total_vectors = 0
+    for retriever in retrievers:
+        try:
+            total_vectors += int(retriever.collection.count())
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError("Failed to read vector store state during startup.") from exc
+
+    if total_vectors <= 0:
+        raise RuntimeError("Vector store is empty. Run 'bookbot-index' before starting the web API.")
+
+
 class ChatRequest(BaseModel):
     """Request payload for book recommendation chat."""
 
@@ -82,8 +101,10 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         settings = get_settings()
+        chatbot = BookChatbot(settings)
+        _ensure_index_ready(chatbot)
         app.state.settings = settings
-        app.state.chatbot = BookChatbot(settings)
+        app.state.chatbot = chatbot
         yield
 
     app = FastAPI(title="Smart Librarian API", version="0.1.0", lifespan=lifespan)
@@ -127,7 +148,11 @@ def create_app() -> FastAPI:
                 model=app.state.settings.stt_model,
             )
         except Exception as exc:  # noqa: BLE001
-            raise HTTPException(status_code=502, detail=f"Transcription failed: {exc}") from exc
+            LOGGER.exception("STT transcription failed.")
+            raise HTTPException(
+                status_code=502,
+                detail="I couldn't process the voice input right now. Please try again.",
+            ) from exc
         return {"text": text}
 
     @app.post("/api/chat", response_model=ChatResponse)
@@ -151,7 +176,11 @@ def create_app() -> FastAPI:
         try:
             result = request.app.state.chatbot.ask(message)
         except Exception as exc:  # noqa: BLE001
-            raise HTTPException(status_code=500, detail=f"Chat request failed: {exc}") from exc
+            LOGGER.exception("Chat request failed.")
+            raise HTTPException(
+                status_code=500,
+                detail="I couldn't generate a recommendation right now. Please try again shortly.",
+            ) from exc
 
         final_text = (
             f"Recommended book: {result.title}\n"
@@ -171,7 +200,11 @@ def create_app() -> FastAPI:
                 )
                 audio_url = f"/audio/{audio_path.name}"
             except Exception as exc:  # noqa: BLE001
-                raise HTTPException(status_code=502, detail=f"TTS generation failed: {exc}") from exc
+                LOGGER.exception("TTS generation failed.")
+                raise HTTPException(
+                    status_code=502,
+                    detail="I couldn't generate audio right now. Please try again.",
+                ) from exc
 
         image_url = None
         if req.enable_image:
@@ -185,7 +218,11 @@ def create_app() -> FastAPI:
                 )
                 image_url = f"/images/{image_path.name}"
             except Exception as exc:  # noqa: BLE001
-                raise HTTPException(status_code=502, detail=f"Image generation failed: {exc}") from exc
+                LOGGER.exception("Image generation failed.")
+                raise HTTPException(
+                    status_code=502,
+                    detail="I couldn't generate an image right now. Please try again.",
+                ) from exc
 
         return ChatResponse(
             blocked=False,

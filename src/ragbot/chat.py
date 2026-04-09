@@ -116,7 +116,7 @@ class BookChatbot:
         return title, reason
 
     def _call_summary_tool_via_llm(self, title: str) -> str:
-        """Force a call to get_summary_by_title and return final natural response."""
+        """Force get_summary_by_title and return the exact local tool output."""
         first = call_with_retry(
             lambda: self.client.responses.create(
                 model=self.settings.chat_model,
@@ -134,38 +134,23 @@ class BookChatbot:
 
         tool_calls = self._extract_function_calls(first)
         if not tool_calls:
-            print("[DEBUG] Tool call missing: using local fallback summary lookup.")
             return self.summary_tool.get_summary_by_title(title)
 
-        print("[DEBUG] Tool call detected: get_summary_by_title invoked via model tool call.")
-        tool_call = tool_calls[0]
+        tool_call = next((call for call in tool_calls if call["name"] == "get_summary_by_title"), None)
+        if tool_call is None:
+            return self.summary_tool.get_summary_by_title(title)
+
         try:
             arguments = json.loads(tool_call["arguments"])
         except json.JSONDecodeError:
-            arguments = {"title": title}
-        tool_title = str(arguments.get("title", title))
-        tool_result = self.summary_tool.get_summary_by_title(tool_title)
+            arguments = {}
 
-        follow_up_input = self._output_items_to_input(first.output)
-        follow_up_input.append(
-            {
-                "type": "function_call_output",
-                "call_id": tool_call["call_id"],
-                "output": tool_result,
-            }
-        )
+        tool_title_raw = arguments.get("title", title)
+        tool_title = str(tool_title_raw).strip() if tool_title_raw is not None else ""
+        if not tool_title:
+            tool_title = title
 
-        second = call_with_retry(
-            lambda: self.client.responses.create(
-                model=self.settings.chat_model,
-                instructions="Respond with recommendation and the provided full summary.",
-                input=follow_up_input,
-                tools=RESPONSES_TOOL_SPEC,
-            )
-        )
-
-        final_text = second.output_text or tool_result
-        return final_text
+        return self.summary_tool.get_summary_by_title(tool_title)
 
     @staticmethod
     def _parse_json_object(text: str) -> dict[str, Any]:
@@ -198,17 +183,6 @@ class BookChatbot:
                 }
             )
         return calls
-
-    @staticmethod
-    def _output_items_to_input(output_items: list[Any]) -> list[Any]:
-        """Convert SDK output items to input list accepted by Responses API."""
-        normalized: list[Any] = []
-        for item in output_items:
-            if hasattr(item, "model_dump"):
-                normalized.append(item.model_dump())
-            else:
-                normalized.append(item)
-        return normalized
 
     def ask(self, user_query: str) -> ChatResult:
         """Run full flow: retrieve -> recommend -> fetch full summary."""

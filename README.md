@@ -73,6 +73,7 @@ Runtime behavior:
 - Configuration is loaded at process startup and treated as immutable at runtime.
 - To apply `.env` or process environment changes, restart the app process.
 - Process environment variables still take precedence over `.env` values.
+- Web API startup fails fast when the vector store is empty; run `bookbot-index` first.
 - For embedding model changes, index data is stored per-model collection. Use fallbacks during rollout to avoid retrieval downtime.
 
 ## Build the Vector Store

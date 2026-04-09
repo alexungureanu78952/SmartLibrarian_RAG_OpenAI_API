@@ -65,6 +65,7 @@ class _FakeChatbot:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.client = object()
+        self.retrievers = [SimpleNamespace(collection=SimpleNamespace(count=lambda: 1))]
 
     def ask(self, message: str) -> SimpleNamespace:
         return SimpleNamespace(
@@ -117,3 +118,51 @@ def test_chat_returns_recommendation_when_not_blocked(monkeypatch: pytest.Monkey
     assert data["blocked"] is False
     assert data["recommendation_title"] == "1984"
     assert "surveillance" in data["detailed_summary"].lower()
+
+
+def test_chat_returns_generic_error_message(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import ragbot.web_api as web_api
+
+    class _FailingChatbot(_FakeChatbot):
+        def ask(self, message: str) -> SimpleNamespace:  # noqa: ARG002
+            raise RuntimeError("openai timeout")
+
+    (tmp_path / "audio_out").mkdir()
+    (tmp_path / "image_out").mkdir()
+    (tmp_path / "src" / "ragbot" / "web").mkdir(parents=True)
+    (tmp_path / "src" / "ragbot" / "web" / "index.html").write_text("<html></html>", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(web_api, "get_settings", lambda: _settings())
+    monkeypatch.setattr(web_api, "BookChatbot", _FailingChatbot)
+    monkeypatch.setattr(
+        web_api,
+        "moderate_text",
+        lambda *_args, **_kwargs: ModerationDecision(blocked=False, source="openai", reason="allowed"),
+    )
+
+    with TestClient(web_api.create_app()) as client:
+        response = client.post("/api/chat", json={"message": "Recommend a classic dystopian book."})
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "I couldn't generate a recommendation right now. Please try again shortly."
+
+
+def test_startup_fails_when_vector_store_is_empty(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import ragbot.web_api as web_api
+
+    class _EmptyIndexChatbot(_FakeChatbot):
+        def __init__(self, settings: Settings) -> None:
+            super().__init__(settings)
+            self.retrievers = [SimpleNamespace(collection=SimpleNamespace(count=lambda: 0))]
+
+    (tmp_path / "audio_out").mkdir()
+    (tmp_path / "image_out").mkdir()
+    (tmp_path / "src" / "ragbot" / "web").mkdir(parents=True)
+    (tmp_path / "src" / "ragbot" / "web" / "index.html").write_text("<html></html>", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(web_api, "get_settings", lambda: _settings())
+    monkeypatch.setattr(web_api, "BookChatbot", _EmptyIndexChatbot)
+
+    with pytest.raises(RuntimeError, match="Vector store is empty"):
+        with TestClient(web_api.create_app()):
+            pass

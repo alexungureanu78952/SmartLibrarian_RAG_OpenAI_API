@@ -3,153 +3,293 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Smart Librarian: friendly AI book recommendations powered by RAG and OpenAI." />
     <title>Smart Librarian</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <style>
       :root {
-        --bg: #f6f1e8;
-        --ink: #1c1a17;
-        --card: #fffaf3;
-        --accent: #d96d3a;
-        --accent-2: #3e7a63;
-        --muted: #6d665f;
+        --bg: #fff6f8;
+        --bg-soft: #ffeef3;
+        --card: #ffffff;
+        --ink: #2e2430;
+        --muted: #6f5f74;
+        --brand: #e40046;
+        --brand-hover: #c4003d;
+        --accent: #ff8a00;
+        --accent-hover: #e67700;
+        --line: #f2d7e2;
+        --shadow: 0 14px 36px rgba(131, 36, 70, 0.12);
       }
-      * { box-sizing: border-box; }
+      * {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
-        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        font-family: "Nunito Sans", "Segoe UI", sans-serif;
         color: var(--ink);
-        background: radial-gradient(circle at 10% 0%, #f8e8d4 0%, var(--bg) 48%),
-                    radial-gradient(circle at 100% 100%, #dce8df 0%, var(--bg) 45%);
+        background:
+          radial-gradient(circle at 6% -5%, #ffd7e4 0%, transparent 32%),
+          radial-gradient(circle at 95% 0%, #ffe5bf 0%, transparent 25%),
+          linear-gradient(180deg, var(--bg-soft) 0%, var(--bg) 55%);
       }
+
       .layout {
-        max-width: 1100px;
+        max-width: 980px;
         margin: 0 auto;
-        padding: 24px;
+        padding: 22px 16px 28px;
       }
-      .hero {
-        display: grid;
-        grid-template-columns: 1.2fr 1fr;
-        gap: 18px;
-        align-items: stretch;
+
+      .brand-strip {
+        width: 100%;
+        background: linear-gradient(90deg, var(--brand) 0%, #ff2f6f 100%);
+        color: #ffffff;
+        font-size: 0.92rem;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        border-radius: 14px;
+        padding: 10px 14px;
+        box-shadow: var(--shadow);
+        margin-bottom: 14px;
       }
+
       .panel {
         background: var(--card);
-        border: 1px solid #eadfce;
+        border: 1px solid var(--line);
         border-radius: 18px;
         padding: 18px;
-        box-shadow: 0 10px 30px rgba(33, 20, 5, 0.08);
+        box-shadow: var(--shadow);
       }
+
+      .panel + .panel {
+        margin-top: 14px;
+      }
+
       h1 {
         margin: 0;
-        font-size: clamp(1.8rem, 3vw, 2.7rem);
-        font-family: "Alegreya", Georgia, serif;
+        font-size: clamp(1.65rem, 2.8vw, 2.3rem);
+        font-family: "Merriweather", Georgia, serif;
+        color: #3a2231;
       }
+
       .sub {
         color: var(--muted);
         margin-top: 8px;
+        line-height: 1.45;
       }
-      .row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+      .chat-box {
+        margin-top: 16px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .label {
+        font-size: 0.95rem;
+        font-weight: 700;
+      }
+
+      .hint {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      fieldset {
+        margin: 0;
+        padding: 0;
+        border: 0;
+        min-width: 0;
+      }
+
+      legend {
+        font-weight: 700;
+        font-size: 0.95rem;
+        margin-bottom: 8px;
+      }
+
       .toggle {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        background: #fff;
-        border: 1px solid #e6dbc8;
+        background: #fff7fa;
+        border: 1px solid var(--line);
         border-radius: 999px;
         padding: 8px 12px;
+        color: #4e3c50;
       }
-      .chat-box {
-        margin-top: 18px;
-        display: grid;
-        gap: 12px;
+
+      .toggle input {
+        accent-color: var(--brand);
       }
+
       textarea {
         width: 100%;
-        min-height: 104px;
+        min-height: 118px;
         border-radius: 12px;
-        border: 1px solid #d8ccb8;
+        border: 1px solid var(--line);
         padding: 12px;
         font: inherit;
+        color: var(--ink);
+        background: #ffffff;
       }
+
+      textarea:focus-visible {
+        outline: 2px solid #ff9cbe;
+        outline-offset: 1px;
+      }
+
       button {
         border: 0;
         border-radius: 12px;
-        padding: 10px 14px;
+        padding: 10px 15px;
         font-weight: 600;
         cursor: pointer;
+        transition: background-color 0.2s ease, transform 0.15s ease;
       }
-      .primary { background: var(--accent); color: #fff; }
-      .secondary { background: var(--accent-2); color: #fff; }
-      .ghost { background: #efe3d0; color: #503f2d; }
+
+      button:hover {
+        transform: translateY(-1px);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .primary {
+        background: var(--brand);
+        color: #fff;
+      }
+
+      .primary:hover {
+        background: var(--brand-hover);
+      }
+
+      .secondary {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .secondary:hover {
+        background: var(--accent-hover);
+      }
+
+      .ghost {
+        background: #ffe3ed;
+        color: #8a2551;
+      }
+
+      .ghost:hover {
+        background: #ffd0e2;
+      }
+
       .out {
         white-space: pre-wrap;
         line-height: 1.5;
         background: #fff;
-        border: 1px solid #e6dbc8;
+        border: 1px solid var(--line);
         border-radius: 12px;
         padding: 12px;
         min-height: 120px;
       }
+
       .media {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 12px;
         margin-top: 12px;
       }
+
       img {
         width: 100%;
         border-radius: 12px;
-        border: 1px solid #e6dbc8;
+        border: 1px solid var(--line);
       }
+
+      .audio-card,
+      .image-card {
+        background: #fff8fb;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+      }
+
       @media (max-width: 900px) {
-        .hero { grid-template-columns: 1fr; }
-        .media { grid-template-columns: 1fr; }
+        .media {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .layout {
+          padding: 16px 12px 24px;
+        }
+
+        .panel {
+          padding: 14px;
+          border-radius: 14px;
+        }
       }
     </style>
   </head>
   <body>
-    <div id="app" class="layout">
-      <div class="hero">
-        <div class="panel">
-          <h1>Smart Librarian</h1>
-          <div class="sub">AI book recommendations with RAG, tool calling, voice mode, and image generation.</div>
-          <div class="chat-box">
-            <textarea v-model="message" placeholder="Ask for a recommendation. Example: I want a book about friendship and magic."></textarea>
+    <main id="app" class="layout">
+      <div class="brand-strip">Book picks you'll actually enjoy</div>
+
+      <section class="panel" aria-labelledby="assistant-title">
+        <h1 id="assistant-title">Smart Librarian</h1>
+        <p class="sub">Book recommendations with voice input, and optional audio/image output, only for you :3</p>
+
+        <div class="chat-box">
+          <div class="field">
+            <label class="label" for="queryInput">What are you in the mood to read?</label>
+            <p class="hint">Example: I want a book about friendship and magic.</p>
+            <textarea id="queryInput" v-model="message" placeholder="Describe your interests and themes..."></textarea>
+          </div>
+
+          <fieldset aria-label="Recommendation options">
+            <legend>Options</legend>
             <div class="row">
               <label class="toggle"><input type="checkbox" v-model="enableTts" /> Enable TTS</label>
               <label class="toggle"><input type="checkbox" v-model="enableImage" /> Generate image</label>
               <label class="toggle"><input type="checkbox" v-model="voiceMode" /> Voice mode</label>
             </div>
-            <div class="row">
-              <button class="primary" @click="sendChat" :disabled="loading">{{ loading ? 'Thinking...' : 'Get Recommendation' }}</button>
-              <button class="secondary" v-if="voiceMode && !recording" @click="startRecording">Start Voice Input</button>
-              <button class="ghost" v-if="recording" @click="stopRecording">Stop Voice Input</button>
-            </div>
+          </fieldset>
+
+          <div class="row">
+            <button type="button" class="primary" @click="sendChat" :disabled="loading">{{ loading ? 'Thinking...' : 'Get Recommendation' }}</button>
+            <button type="button" class="secondary" v-if="voiceMode && !recording" @click="startRecording">Start Voice Input</button>
+            <button type="button" class="ghost" v-if="recording" @click="stopRecording">Stop Voice Input</button>
           </div>
         </div>
+      </section>
 
-        <div class="panel">
-          <strong>Transcript / Status</strong>
-          <div class="out">{{ statusText }}</div>
-        </div>
-      </div>
-
-      <div class="panel" style="margin-top: 16px">
-        <strong>Assistant Output</strong>
-        <div class="out">{{ answerText }}</div>
+      <section class="panel" aria-labelledby="output-title">
+        <strong id="output-title">Assistant Output</strong>
+        <div class="out" aria-live="polite">{{ answerText }}</div>
         <div class="media" v-if="audioUrl || imageUrl">
-          <div v-if="audioUrl">
+          <div v-if="audioUrl" class="audio-card">
             <strong>Audio</strong>
             <audio :src="audioUrl" controls style="width: 100%; margin-top: 8px"></audio>
           </div>
-          <div v-if="imageUrl">
+          <div v-if="imageUrl" class="image-card">
             <strong>Generated Image</strong>
             <img :src="imageUrl" alt="Generated book scene" style="margin-top: 8px" />
           </div>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
 
     <script>
       const { createApp } = Vue;
@@ -160,7 +300,6 @@
           return {
             message: "",
             loading: false,
-            statusText: "Ready.",
             answerText: "",
             enableTts: false,
             enableImage: false,
@@ -176,14 +315,13 @@
           async sendChat() {
             const trimmed = this.message.trim();
             if (!trimmed) {
-              this.statusText = "Please enter a message first.";
+              this.answerText = "Please enter a message first.";
               return;
             }
             this.loading = true;
             this.answerText = "";
             this.audioUrl = null;
             this.imageUrl = null;
-            this.statusText = "Sending request...";
             try {
               const resp = await fetch(`${API_BASE}/api/chat`, {
                 method: "POST",
@@ -196,8 +334,13 @@
               });
 
               if (!resp.ok) {
-                const err = await resp.json();
-                throw new Error(err.detail || "Chat request failed.");
+                let err = null;
+                try {
+                  err = await resp.json();
+                } catch (_ignored) {
+                  err = null;
+                }
+                throw new Error((err && err.detail) || "I couldn't generate a recommendation right now. Please try again shortly.");
               }
 
               const data = await resp.json();
@@ -214,9 +357,9 @@
                 this.imageUrl = API_BASE ? `${API_BASE}${data.image_url}` : data.image_url;
               }
 
-              this.statusText = "Done.";
             } catch (err) {
-              this.statusText = `Network error: ${err.message}. Ensure backend is running with 'bookbot-web' on http://127.0.0.1:8000.`;
+              console.error("Chat request error:", err);
+              this.answerText = "I couldn't generate a recommendation right now. Please try again shortly.";
             } finally {
               this.loading = false;
             }
@@ -236,9 +379,9 @@
               };
               this.mediaRecorder.start();
               this.recording = true;
-              this.statusText = "Recording... speak now.";
             } catch (err) {
-              this.statusText = `Microphone error: ${err.message}`;
+              console.error("Microphone error:", err);
+              this.answerText = "I couldn't access your microphone. Please check permissions and try again.";
             }
           },
 
@@ -246,7 +389,6 @@
             if (this.mediaRecorder && this.recording) {
               this.mediaRecorder.stop();
               this.recording = false;
-              this.statusText = "Processing voice...";
             }
           },
 
@@ -262,18 +404,23 @@
               });
 
               if (!resp.ok) {
-                const err = await resp.json();
-                throw new Error(err.detail || "STT failed.");
+                let err = null;
+                try {
+                  err = await resp.json();
+                } catch (_ignored) {
+                  err = null;
+                }
+                throw new Error((err && err.detail) || "I couldn't process the voice input right now. Please try again.");
               }
 
               const data = await resp.json();
               this.message = data.text || "";
-              this.statusText = `Transcript: ${this.message}`;
               if (this.message.trim()) {
                 await this.sendChat();
               }
             } catch (err) {
-              this.statusText = `STT error: ${err.message}`;
+              console.error("STT error:", err);
+              this.answerText = "I couldn't process the voice input right now. Please try again.";
             }
           },
         },
