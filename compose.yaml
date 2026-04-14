@@ -1,0 +1,34 @@
+services:
+  indexer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: smartlibrarian:local
+    profiles:
+      - tools
+    env_file:
+      - .env
+    command: ["bookbot-index"]
+    volumes:
+      - chroma_data:/app/chroma_db
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: smartlibrarian:local
+    env_file:
+      - .env
+    command: ["bookbot-web"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/app/chroma_db
+      - audio_data:/app/audio_out
+      - image_data:/app/image_out
+    restart: unless-stopped
+
+volumes:
+  chroma_data:
+  audio_data:
+  image_data:
