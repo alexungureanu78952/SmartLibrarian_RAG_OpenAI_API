@@ -83,3 +83,21 @@ def test_chat_uses_exact_local_summary(monkeypatch: pytest.MonkeyPatch, _setting
 
     assert result.title == "The Hobbit"
     assert result.full_summary == "Exact local summary."
+
+
+def test_chat_rejects_empty_user_query(monkeypatch: pytest.MonkeyPatch, _settings: Settings) -> None:
+    monkeypatch.setattr("ragbot.chat.OpenAI", lambda api_key: _FakeOpenAIClient())
+    monkeypatch.setattr(
+        "ragbot.chat.load_book_entries",
+        lambda _path: [{"title": "The Hobbit", "summary": "Exact local summary.", "themes": ["adventure"]}],
+    )
+    monkeypatch.setattr(
+        "ragbot.chat.build_summary_dict",
+        lambda _entries: {"The Hobbit": "Exact local summary."},
+    )
+    monkeypatch.setattr("ragbot.chat.Retriever.from_paths", lambda **_kwargs: _FakeRetriever())
+
+    chatbot = BookChatbot(_settings)
+
+    with pytest.raises(ValueError, match="User query cannot be empty"):
+        chatbot.ask("   ")

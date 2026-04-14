@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -29,8 +30,15 @@ def generate_book_image(
     output_dir: Path,
 ) -> Path:
     """Generate and persist a single representative image for a recommendation."""
+    clean_title = title.strip()
+    clean_reason = reason.strip()
+    if not clean_title:
+        raise ValueError("title cannot be empty for image generation.")
+    if not clean_reason:
+        raise ValueError("reason cannot be empty for image generation.")
+
     output_dir.mkdir(parents=True, exist_ok=True)
-    prompt = build_image_prompt(title=title, reason=reason)
+    prompt = build_image_prompt(title=clean_title, reason=clean_reason)
 
     result = call_with_retry(
         lambda: client.images.generate(
@@ -40,12 +48,16 @@ def generate_book_image(
         )
     )
 
+    if not getattr(result, "data", None):
+        raise ValueError("Image generation returned no data payload.")
+
     b64_data = result.data[0].b64_json
     if not b64_data:
         raise ValueError("Image generation returned no image data.")
 
-    image_bytes = base64.b64decode(b64_data)
-    filename = f"{title.lower().replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+    image_bytes = base64.b64decode(b64_data, validate=True)
+    safe_title = re.sub(r"[^a-z0-9]+", "_", clean_title.lower()).strip("_") or "book"
+    filename = f"{safe_title}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
     output_path = output_dir / filename
     output_path.write_bytes(image_bytes)
     return output_path

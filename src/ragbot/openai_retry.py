@@ -26,6 +26,13 @@ def call_with_retry(operation: Callable[[], T], max_attempts: int = 3, base_dela
     Retries only transient network/service errors. Any non-transient exception is
     re-raised immediately.
     """
+    if not callable(operation):
+        raise TypeError("operation must be callable.")
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be at least 1.")
+    if base_delay < 0:
+        raise ValueError("base_delay must be greater than or equal to 0.")
+
     last_error: Exception | None = None
     for attempt in range(1, max_attempts + 1):
         try:

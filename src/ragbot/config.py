@@ -115,7 +115,7 @@ def _parse_settings(
     )
 
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=1)
 def _get_settings_cached() -> Settings:
     """Create settings once per process; restart to apply config changes."""
     env_map = _build_env_map()

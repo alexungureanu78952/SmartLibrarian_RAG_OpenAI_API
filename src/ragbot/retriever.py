@@ -51,13 +51,28 @@ class Retriever:
         )
 
     def embed_text(self, text: str) -> list[float]:
+        if not text.strip():
+            raise ValueError("Embedding input text cannot be empty.")
+
         emb = call_with_retry(
             lambda: self.client.embeddings.create(model=self.embedding_model, input=text)
         )
-        return emb.data[0].embedding
+        if not getattr(emb, "data", None):
+            raise ValueError("Embedding response contained no data.")
+
+        embedding = emb.data[0].embedding
+        if not embedding:
+            raise ValueError("Embedding response contained an empty vector.")
+
+        return embedding
 
     def search(self, query: str, top_k: int) -> list[dict[str, str]]:
         """Return top-k semantic matches from the vector store."""
+        if not query.strip():
+            raise ValueError("Search query cannot be empty.")
+        if top_k <= 0:
+            raise ValueError("top_k must be greater than 0.")
+
         query_embedding = self.embed_text(query)
         result = self.collection.query(
             query_embeddings=[query_embedding],

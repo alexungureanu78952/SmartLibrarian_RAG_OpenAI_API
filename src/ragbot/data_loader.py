@@ -9,6 +9,9 @@ from typing import Any
 
 def load_book_entries(json_path: Path) -> list[dict[str, Any]]:
     """Load and validate the local JSON summaries dataset."""
+    if not json_path.exists() or not json_path.is_file():
+        raise ValueError(f"Summaries file was not found: {json_path}")
+
     with json_path.open("r", encoding="utf-8") as f:
         raw = json.load(f)
 
@@ -22,6 +25,19 @@ def load_book_entries(json_path: Path) -> list[dict[str, Any]]:
         missing = required - set(entry.keys())
         if missing:
             raise ValueError(f"Book entry '{entry}' is missing fields: {sorted(missing)}")
+
+        title = str(entry["title"]).strip()
+        summary = str(entry["summary"]).strip()
+        themes = entry["themes"]
+
+        if not title:
+            raise ValueError(f"Book entry at index {i} has an empty title.")
+        if not summary:
+            raise ValueError(f"Book entry '{title}' has an empty summary.")
+        if not isinstance(themes, list):
+            raise ValueError(f"Book entry '{title}' must have themes as a list.")
+        if any(not str(theme).strip() for theme in themes):
+            raise ValueError(f"Book entry '{title}' contains an empty theme value.")
 
     return raw
 

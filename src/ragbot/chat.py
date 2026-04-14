@@ -186,6 +186,9 @@ class BookChatbot:
 
     def ask(self, user_query: str) -> ChatResult:
         """Run full flow: retrieve -> recommend -> fetch full summary."""
+        if not user_query.strip():
+            raise ValueError("User query cannot be empty.")
+
         hits = self._search_with_fallbacks(user_query)
         if not hits:
             raise ValueError("No retrieval hits found. Run indexing first.")
